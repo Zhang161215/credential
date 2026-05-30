@@ -78,27 +78,27 @@ export async function POST(request: Request) {
     const updateCred = db.prepare(
       "UPDATE credentials SET is_redeemed = 1, redeemed_by_user_id = ?, redeemed_at = ? WHERE id = ?"
     );
-    const insertTx = db.prepare(
-      `INSERT INTO user_transactions
-       (user_id, type, amount, balance_after, related_credential_id, created_at)
-       VALUES (?, 'redeem', ?, ?, ?, ?)`
-    );
 
-    let runningBalance = userRow.balance;
     for (const c of credentials) {
       updateCred.run(session.id, now, c.id);
-      runningBalance -= price;
-      insertTx.run(session.id, -price, runningBalance, c.id, now);
     }
 
+    const newBalance = userRow.balance - totalCost;
+
     db.prepare("UPDATE users SET balance = ? WHERE id = ?").run(
-      runningBalance,
+      newBalance,
       session.id
     );
 
+    db.prepare(
+      `INSERT INTO user_transactions
+       (user_id, type, amount, count, balance_after, related_credential_id, created_at)
+       VALUES (?, 'redeem', ?, ?, ?, NULL, ?)`
+    ).run(session.id, -totalCost, count, newBalance, now);
+
     return {
       ok: true as const,
-      balance: runningBalance,
+      balance: newBalance,
       price,
       totalCost,
       credentials,

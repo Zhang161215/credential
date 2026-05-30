@@ -33,6 +33,7 @@ function initTables(db: Database.Database) {
       user_id INTEGER NOT NULL,
       type TEXT NOT NULL,
       amount INTEGER NOT NULL,
+      count INTEGER NOT NULL DEFAULT 1,
       balance_after INTEGER NOT NULL,
       related_card_key TEXT,
       related_credential_id INTEGER,
@@ -98,5 +99,15 @@ function initTables(db: Database.Database) {
     const password = process.env.ADMIN_INIT_PASSWORD || "admin123456";
     const hash = bcrypt.hashSync(password, 10);
     db.prepare("INSERT INTO admin (username, password_hash) VALUES (?, ?)").run("admin", hash);
+  }
+
+  // Migration: ensure user_transactions.count column exists for older DBs
+  const cols = db
+    .prepare("PRAGMA table_info(user_transactions)")
+    .all() as { name: string }[];
+  if (!cols.some((c) => c.name === "count")) {
+    db.exec(
+      "ALTER TABLE user_transactions ADD COLUMN count INTEGER NOT NULL DEFAULT 1"
+    );
   }
 }

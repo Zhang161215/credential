@@ -59,8 +59,8 @@ export async function POST() {
 
       db.prepare(
         `INSERT INTO user_transactions
-         (user_id, type, amount, balance_after, related_credential_id, created_at)
-         VALUES (?, 'redeem', ?, ?, ?, ?)`
+         (user_id, type, amount, count, balance_after, related_credential_id, created_at)
+         VALUES (?, 'redeem', ?, 1, ?, ?, ?)`
       ).run(session.id, -price, newBalance, credential.id, now);
 
       return {

@@ -49,9 +49,11 @@ export async function GET() {
   ).v;
   const totalRedeemed = (
     db
-      .prepare("SELECT COUNT(*) as count FROM user_transactions WHERE type = 'redeem'")
-      .get() as { count: number }
-  ).count;
+      .prepare(
+        "SELECT COALESCE(SUM(count), 0) as v FROM user_transactions WHERE type = 'redeem'"
+      )
+      .get() as { v: number }
+  ).v;
   const totalBalance = (
     db.prepare("SELECT COALESCE(SUM(balance), 0) as v FROM users").get() as { v: number }
   ).v;

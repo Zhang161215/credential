@@ -89,8 +89,8 @@ export async function POST(request: Request) {
       }
       db.prepare("UPDATE users SET balance = ? WHERE id = ?").run(newBalance, userId);
       db.prepare(
-        `INSERT INTO user_transactions (user_id, type, amount, balance_after, created_at)
-         VALUES (?, 'admin_adjust', ?, ?, ?)`
+        `INSERT INTO user_transactions (user_id, type, amount, count, balance_after, created_at)
+         VALUES (?, 'admin_adjust', ?, 1, ?, ?)`
       ).run(userId, delta, newBalance, now);
       return { ok: true as const, balance: newBalance };
     })();

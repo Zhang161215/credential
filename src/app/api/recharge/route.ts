@@ -61,8 +61,8 @@ export async function POST(request: Request) {
 
       db.prepare(
         `INSERT INTO user_transactions
-         (user_id, type, amount, balance_after, related_card_key, created_at)
-         VALUES (?, 'recharge', ?, ?, ?, ?)`
+         (user_id, type, amount, count, balance_after, related_card_key, created_at)
+         VALUES (?, 'recharge', ?, 1, ?, ?, ?)`
       ).run(session.id, card.value, newBalance, card.key, now);
 
       return { ok: true as const, value: card.value, balance: newBalance };
