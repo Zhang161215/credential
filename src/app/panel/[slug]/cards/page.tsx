@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,17 +47,19 @@ export default function CardsPage() {
   const [batchDeleting, setBatchDeleting] = useState(false);
 
   const router = useRouter();
+  const params = useParams();
+  const slug = params.slug as string;
 
   const fetchData = useCallback(() => {
     setLoading(true);
     setSelectedIds(new Set()); // Clear selection on data fetch
-    const params = new URLSearchParams({ page: page.toString() });
-    if (status) params.set("status", status);
+    const qs = new URLSearchParams({ page: page.toString() });
+    if (status) qs.set("status", status);
 
-    fetch(`/api/admin/cards?${params}`)
+    fetch(`/api/admin/cards?${qs}`)
       .then((res) => {
         if (res.status === 401) {
-          router.push("/admin/login");
+          router.push(`/panel/${slug}/login`);
           return null;
         }
         return res.json();
@@ -70,7 +72,7 @@ export default function CardsPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, [page, status, router]);
+  }, [page, status, router, slug]);
 
   useEffect(() => {
     fetchData();

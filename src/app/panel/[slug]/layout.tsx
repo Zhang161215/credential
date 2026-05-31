@@ -2,73 +2,68 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { LayoutDashboard, FileText, KeyRound, Settings, LogOut, Users, History, Shield } from "lucide-react";
+import { LayoutDashboard, FileText, KeyRound, Settings, LogOut, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const baseNavItems = [
-  { href: "/admin", label: "仪表盘", icon: LayoutDashboard },
-  { href: "/admin/credentials", label: "凭证管理", icon: FileText },
-  { href: "/admin/cards", label: "卡密管理", icon: KeyRound },
-  { href: "/admin/records", label: "提取记录", icon: History },
-  { href: "/admin/users", label: "用户管理", icon: Users },
-  { href: "/admin/settings", label: "系统设置", icon: Settings },
-];
-
-const superadminNavItems = [
-  { href: "/admin/admins", label: "子管理员", icon: Shield },
-];
-
-export default function AdminLayout({
+export default function PanelLayout({
   children,
+  params,
 }: {
   children: React.ReactNode;
+  params: Promise<{ slug: string }>;
 }) {
+  const { slug } = use(params);
   const pathname = usePathname();
   const router = useRouter();
-  const [isSuperadmin, setIsSuperadmin] = useState(false);
+  const [verified, setVerified] = useState(false);
+
+  const basePath = `/panel/${slug}`;
+
+  const navItems = [
+    { href: basePath, label: "仪表盘", icon: LayoutDashboard },
+    { href: `${basePath}/credentials`, label: "凭证管理", icon: FileText },
+    { href: `${basePath}/cards`, label: "卡密管理", icon: KeyRound },
+    { href: `${basePath}/records`, label: "提取记录", icon: History },
+    { href: `${basePath}/settings`, label: "系统设置", icon: Settings },
+  ];
 
   useEffect(() => {
-    // Check admin role via a lightweight API call
+    if (pathname === `${basePath}/login`) {
+      setVerified(true);
+      return;
+    }
+    // Verify auth
     fetch("/api/admin/stats")
       .then((res) => {
-        if (res.status === 401 && pathname !== "/admin/login") {
-          router.push("/admin/login");
+        if (res.status === 401) {
+          router.push(`${basePath}/login`);
+        } else {
+          setVerified(true);
         }
-        return res;
       })
-      .catch(() => {});
+      .catch(() => router.push(`${basePath}/login`));
+  }, [pathname, basePath, router]);
 
-    // Check if current admin is superadmin
-    fetch("/api/admin/admins")
-      .then((res) => {
-        if (res.ok) setIsSuperadmin(true);
-        // 403 means not superadmin, which is fine
-      })
-      .catch(() => {});
-  }, [pathname, router]);
-
-  if (pathname === "/admin/login") {
+  if (pathname === `${basePath}/login`) {
     return <>{children}</>;
   }
 
+  if (!verified) return null;
+
   const handleLogout = async () => {
     await fetch("/api/admin/logout", { method: "POST" });
-    router.push("/admin/login");
+    router.push(`${basePath}/login`);
   };
-
-  const navItems = isSuperadmin
-    ? [...baseNavItems, ...superadminNavItems]
-    : baseNavItems;
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar */}
       <aside className="w-60 flex flex-col shrink-0 border-r border-border bg-card">
         <div className="p-5">
-          <h1 className="text-lg font-bold">管理后台</h1>
+          <h1 className="text-lg font-bold">管理面板</h1>
+          <p className="text-xs text-muted-foreground mt-1">ID: {slug}</p>
         </div>
         <Separator />
 
@@ -105,7 +100,6 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      {/* Main content */}
       <main className="flex-1 p-6 overflow-auto">{children}</main>
     </div>
   );

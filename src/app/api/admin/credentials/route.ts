@@ -3,8 +3,9 @@ import { requireAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
+  let admin;
   try {
-    await requireAdmin();
+    admin = await requireAdmin();
   } catch {
     return Response.json({ error: "未授权" }, { status: 401 });
   }
@@ -13,18 +14,28 @@ export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
   const pageSize = 20;
-  const status = url.searchParams.get("status") || ""; // "" | "available" | "redeemed"
+  const status = url.searchParams.get("status") || "";
   const offset = (page - 1) * pageSize;
 
-  let where = "";
-  if (status === "available") {
-    where = "WHERE c.is_redeemed = 0";
-  } else if (status === "redeemed") {
-    where = "WHERE c.is_redeemed = 1";
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  // Admin data isolation
+  if (admin.role !== "superadmin") {
+    conditions.push("c.admin_id = ?");
+    params.push(admin.id);
   }
 
+  if (status === "available") {
+    conditions.push("c.is_redeemed = 0");
+  } else if (status === "redeemed") {
+    conditions.push("c.is_redeemed = 1");
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
   const total = (
-    db.prepare(`SELECT COUNT(*) as count FROM credentials c ${where}`).get() as {
+    db.prepare(`SELECT COUNT(*) as count FROM credentials c ${where}`).get(...params) as {
       count: number;
     }
   ).count;
@@ -39,7 +50,7 @@ export async function GET(request: NextRequest) {
        ORDER BY c.id DESC
        LIMIT ? OFFSET ?`
     )
-    .all(pageSize, offset);
+    .all(...params, pageSize, offset);
 
   return Response.json({
     data: rows,
@@ -51,8 +62,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let admin;
   try {
-    await requireAdmin();
+    admin = await requireAdmin();
   } catch {
     return Response.json({ error: "未授权" }, { status: 401 });
   }
@@ -67,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     const insert = db.prepare(
-      "INSERT INTO credentials (filename, content) VALUES (?, ?)"
+      "INSERT INTO credentials (filename, content, admin_id) VALUES (?, ?, ?)"
     );
 
     const fileData: { name: string; content: string }[] = [];
@@ -84,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     const insertAll = db.transaction((items: { name: string; content: string }[]) => {
       for (const item of items) {
-        insert.run(item.name, item.content);
+        insert.run(item.name, item.content, admin.id);
       }
     });
 

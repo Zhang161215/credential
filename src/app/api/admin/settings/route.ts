@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
   );
 
-  const allowedKeys = ["announcement", "contact_info", "account_price"];
+  const allowedKeys = ["announcement", "contact_info", "contact_icon", "account_price"];
   const transaction = db.transaction((entries: [string, string][]) => {
     for (const [k, v] of entries) {
       if (!allowedKeys.includes(k)) continue;

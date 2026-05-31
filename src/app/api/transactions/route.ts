@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   const rows = db
     .prepare(
       `SELECT t.id, t.type, t.amount, t.count, t.balance_after, t.related_card_key,
-              t.related_credential_id, t.created_at,
+              t.related_credential_id, t.related_credential_ids, t.created_at,
               c.filename as credential_filename
        FROM user_transactions t
        LEFT JOIN credentials c ON c.id = t.related_credential_id

@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 
 interface RecentRow {
@@ -15,13 +16,31 @@ function maskUsername(name: string | null | undefined): string {
   return name[0] + "***" + name[len - 1];
 }
 
-export async function GET() {
+function resolveAdminId(db: ReturnType<typeof getDb>, slug: string | null): number | null {
+  if (!slug) return null;
+  const row = db
+    .prepare("SELECT id FROM admin WHERE slug = ?")
+    .get(slug) as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
+export async function GET(request: NextRequest) {
   const db = getDb();
+  const slug = request.nextUrl.searchParams.get("slug");
+  const adminId = resolveAdminId(db, slug);
+
+  // If slug is provided but invalid, return empty
+  if (slug && adminId === null) {
+    return Response.json({ inventory: 0, recent5min: 0, recent_redeems: [] });
+  }
+
+  const credWhere = adminId ? "AND c.admin_id = ?" : "";
+  const credParams = adminId ? [adminId] : [];
 
   const inventory = (
     db
-      .prepare("SELECT COUNT(*) as count FROM credentials WHERE is_redeemed = 0")
-      .get() as { count: number }
+      .prepare(`SELECT COUNT(*) as count FROM credentials c WHERE c.is_redeemed = 0 ${credWhere}`)
+      .get(...credParams) as { count: number }
   ).count;
 
   const recent5min = (

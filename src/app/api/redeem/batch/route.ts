@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import JSZip from "jszip";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -10,7 +11,15 @@ interface CredentialRow {
 
 const MAX_BATCH = 50;
 
-export async function POST(request: Request) {
+function resolveAdminId(db: ReturnType<typeof getDb>, slug: string | null): number | null {
+  if (!slug) return null;
+  const row = db
+    .prepare("SELECT id FROM admin WHERE slug = ?")
+    .get(slug) as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
+export async function POST(request: NextRequest) {
   let session;
   try {
     session = await requireUser();
@@ -35,6 +44,8 @@ export async function POST(request: Request) {
 
   const db = getDb();
   const now = new Date().toISOString().replace("T", " ").substring(0, 19);
+  const slug = request.nextUrl.searchParams.get("slug");
+  const adminId = resolveAdminId(db, slug);
 
   const result = db.transaction(() => {
     const priceRow = db
@@ -61,11 +72,14 @@ export async function POST(request: Request) {
       };
     }
 
+    const adminFilter = adminId ? "AND admin_id = ?" : "";
+    const adminParams = adminId ? [adminId] : [];
+
     const credentials = db
       .prepare(
-        "SELECT id, filename, content FROM credentials WHERE is_redeemed = 0 ORDER BY id ASC LIMIT ?"
+        `SELECT id, filename, content FROM credentials WHERE is_redeemed = 0 ${adminFilter} ORDER BY id ASC LIMIT ?`
       )
-      .all(count) as CredentialRow[];
+      .all(...adminParams, count) as CredentialRow[];
 
     if (credentials.length < count) {
       return {
@@ -90,11 +104,13 @@ export async function POST(request: Request) {
       session.id
     );
 
+    const credentialIds = credentials.map((c) => c.id);
+
     db.prepare(
       `INSERT INTO user_transactions
-       (user_id, type, amount, count, balance_after, related_credential_id, created_at)
-       VALUES (?, 'redeem', ?, ?, ?, NULL, ?)`
-    ).run(session.id, -totalCost, count, newBalance, now);
+       (user_id, type, amount, count, balance_after, related_credential_id, related_credential_ids, created_at)
+       VALUES (?, 'redeem', ?, ?, ?, NULL, ?, ?)`
+    ).run(session.id, -totalCost, count, newBalance, JSON.stringify(credentialIds), now);
 
     return {
       ok: true as const,

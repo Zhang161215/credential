@@ -29,9 +29,19 @@ function verify(token: string): string | null {
 
 // ========== Admin session ==========
 
-export async function createSession(username: string): Promise<void> {
+export interface AdminSession {
+  id: number;
+  username: string;
+  role: "superadmin" | "admin";
+  slug: string | null;
+}
+
+export async function createSession(admin: AdminSession): Promise<void> {
   const payload = JSON.stringify({
-    username,
+    id: admin.id,
+    username: admin.username,
+    role: admin.role,
+    slug: admin.slug,
     exp: Date.now() + SESSION_MAX_AGE * 1000,
   });
   const token = sign(payload);
@@ -50,7 +60,7 @@ export async function destroySession(): Promise<void> {
   cookieStore.delete(ADMIN_COOKIE_NAME);
 }
 
-export async function getSession(): Promise<{ username: string } | null> {
+export async function getSession(): Promise<AdminSession | null> {
   const cookieStore = await cookies();
   const cookie = cookieStore.get(ADMIN_COOKIE_NAME);
   if (!cookie) return null;
@@ -61,16 +71,43 @@ export async function getSession(): Promise<{ username: string } | null> {
   try {
     const data = JSON.parse(payload);
     if (data.exp < Date.now()) return null;
-    return { username: data.username };
+
+    // Backward compatibility: old sessions only had username
+    return {
+      id: data.id || 0,
+      username: data.username,
+      role: data.role || "superadmin",
+      slug: data.slug || null,
+    };
   } catch {
     return null;
   }
 }
 
-export async function requireAdmin(): Promise<{ username: string }> {
+export async function requireAdmin(): Promise<AdminSession> {
   const session = await getSession();
   if (!session) {
     throw new Error("Unauthorized");
+  }
+  // For backward compat: if session has no id, look it up
+  if (!session.id) {
+    const db = getDb();
+    const row = db
+      .prepare("SELECT id, role, slug FROM admin WHERE username = ?")
+      .get(session.username) as { id: number; role: string; slug: string | null } | undefined;
+    if (row) {
+      session.id = row.id;
+      session.role = (row.role || "superadmin") as "superadmin" | "admin";
+      session.slug = row.slug;
+    }
+  }
+  return session;
+}
+
+export async function requireSuperAdmin(): Promise<AdminSession> {
+  const session = await requireAdmin();
+  if (session.role !== "superadmin") {
+    throw new Error("Forbidden");
   }
   return session;
 }

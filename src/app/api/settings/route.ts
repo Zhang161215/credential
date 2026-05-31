@@ -4,7 +4,7 @@ export async function GET() {
   const db = getDb();
   const rows = db
     .prepare(
-      "SELECT key, value FROM settings WHERE key IN ('announcement', 'contact_info', 'account_price')"
+      "SELECT key, value FROM settings WHERE key IN ('announcement', 'contact_info', 'contact_icon', 'account_price')"
     )
     .all() as { key: string; value: string }[];
   const result: Record<string, string> = {};

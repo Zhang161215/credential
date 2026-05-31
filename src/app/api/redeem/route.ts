@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 
@@ -7,7 +8,15 @@ interface CredentialRow {
   content: string;
 }
 
-export async function POST() {
+function resolveAdminId(db: ReturnType<typeof getDb>, slug: string | null): number | null {
+  if (!slug) return null;
+  const row = db
+    .prepare("SELECT id FROM admin WHERE slug = ?")
+    .get(slug) as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
+export async function POST(request: NextRequest) {
   let session;
   try {
     session = await requireUser();
@@ -17,6 +26,8 @@ export async function POST() {
 
   const db = getDb();
   const now = new Date().toISOString().replace("T", " ").substring(0, 19);
+  const slug = request.nextUrl.searchParams.get("slug");
+  const adminId = resolveAdminId(db, slug);
 
   try {
     const result = db.transaction(() => {
@@ -39,11 +50,15 @@ export async function POST() {
         return { ok: false as const, status: 400, error: `余额不足，当前 ${userRow.balance} 点，需 ${price} 点` };
       }
 
+      // Filter by admin_id if slug provided
+      const adminFilter = adminId ? "AND admin_id = ?" : "";
+      const adminParams = adminId ? [adminId] : [];
+
       const credential = db
         .prepare(
-          "SELECT id, filename, content FROM credentials WHERE is_redeemed = 0 ORDER BY id ASC LIMIT 1"
+          `SELECT id, filename, content FROM credentials WHERE is_redeemed = 0 ${adminFilter} ORDER BY id ASC LIMIT 1`
         )
-        .get() as CredentialRow | undefined;
+        .get(...adminParams) as CredentialRow | undefined;
 
       if (!credential) {
         return { ok: false as const, status: 400, error: "暂无可用账号，请联系管理员" };
@@ -59,9 +74,9 @@ export async function POST() {
 
       db.prepare(
         `INSERT INTO user_transactions
-         (user_id, type, amount, count, balance_after, related_credential_id, created_at)
-         VALUES (?, 'redeem', ?, 1, ?, ?, ?)`
-      ).run(session.id, -price, newBalance, credential.id, now);
+         (user_id, type, amount, count, balance_after, related_credential_id, related_credential_ids, created_at)
+         VALUES (?, 'redeem', ?, 1, ?, ?, ?, ?)`
+      ).run(session.id, -price, newBalance, credential.id, JSON.stringify([credential.id]), now);
 
       return {
         ok: true as const,

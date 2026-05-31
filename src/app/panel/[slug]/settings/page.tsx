@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,27 +9,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Save, Megaphone, MessageCircle, Coins } from "lucide-react";
 
-const ICON_OPTIONS = [
-  { value: "qq", label: "QQ" },
-  { value: "telegram", label: "Telegram" },
-  { value: "wechat", label: "微信" },
-];
-
 export default function SettingsPage() {
   const [announcement, setAnnouncement] = useState("");
   const [contactInfo, setContactInfo] = useState("");
-  const [contactIcon, setContactIcon] = useState("qq");
   const [accountPrice, setAccountPrice] = useState("100");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const router = useRouter();
+  const params = useParams();
+  const slug = params.slug as string;
 
   useEffect(() => {
     fetch("/api/admin/settings")
       .then((res) => {
         if (res.status === 401) {
-          router.push("/admin/login");
+          router.push(`/panel/${slug}/login`);
           return null;
         }
         return res.json();
@@ -38,12 +33,11 @@ export default function SettingsPage() {
         if (data) {
           setAnnouncement(data.announcement || "");
           setContactInfo(data.contact_info || "");
-          setContactIcon(data.contact_icon || "qq");
           setAccountPrice(data.account_price || "100");
         }
       })
       .finally(() => setLoading(false));
-  }, [router]);
+  }, [router, slug]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +51,6 @@ export default function SettingsPage() {
         body: JSON.stringify({
           announcement,
           contact_info: contactInfo,
-          contact_icon: contactIcon,
           account_price: accountPrice,
         }),
       });
@@ -137,35 +130,16 @@ export default function SettingsPage() {
               <MessageCircle className="size-4" />
               联系方式
             </CardTitle>
-            <CardDescription>显示在前台侧栏，用户遇到问题时联系。以 @ 开头自动生成 Telegram 链接，以 http 开头自动生成可点击链接</CardDescription>
+            <CardDescription>显示在前台侧栏，用户遇到问题时联系</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent>
             <div className="space-y-2">
-              <Label>图标样式</Label>
-              <div className="flex gap-2">
-                {ICON_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setContactIcon(opt.value)}
-                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                      contactIcon === opt.value
-                        ? "bg-neutral-900 text-white border-neutral-900"
-                        : "bg-white text-neutral-600 border-border hover:border-neutral-400"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="contact">联系方式内容</Label>
+              <Label htmlFor="contact">联系方式</Label>
               <Input
                 id="contact"
                 value={contactInfo}
                 onChange={(e) => setContactInfo(e.target.value)}
-                placeholder="例如：@username 或 QQ群 123456 或 https://..."
+                placeholder="例如：Telegram @xxx 或 QQ群 123456"
               />
             </div>
           </CardContent>

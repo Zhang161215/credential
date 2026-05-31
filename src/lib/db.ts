@@ -85,6 +85,7 @@ function initTables(db: Database.Database) {
   const defaultSettings: [string, string][] = [
     ["announcement", ""],
     ["contact_info", ""],
+    ["contact_icon", "qq"],
     ["account_price", "100"],
   ];
   const upsertSetting = db.prepare(
@@ -110,4 +111,67 @@ function initTables(db: Database.Database) {
       "ALTER TABLE user_transactions ADD COLUMN count INTEGER NOT NULL DEFAULT 1"
     );
   }
+
+  // Migration: add related_credential_ids column for batch redeem download support
+  if (!cols.some((c) => c.name === "related_credential_ids")) {
+    db.exec(
+      "ALTER TABLE user_transactions ADD COLUMN related_credential_ids TEXT"
+    );
+    // Backfill: migrate existing single related_credential_id to JSON array
+    db.exec(
+      `UPDATE user_transactions
+       SET related_credential_ids = '[' || related_credential_id || ']'
+       WHERE related_credential_id IS NOT NULL AND related_credential_ids IS NULL`
+    );
+  }
+
+  // Migration: multi-admin support - add columns to admin table
+  const adminCols = db
+    .prepare("PRAGMA table_info(admin)")
+    .all() as { name: string }[];
+  if (!adminCols.some((c) => c.name === "role")) {
+    db.exec("ALTER TABLE admin ADD COLUMN role TEXT NOT NULL DEFAULT 'superadmin'");
+  }
+  if (!adminCols.some((c) => c.name === "slug")) {
+    db.exec("ALTER TABLE admin ADD COLUMN slug TEXT");
+  }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_slug ON admin(slug)");
+  if (!adminCols.some((c) => c.name === "display_name")) {
+    db.exec("ALTER TABLE admin ADD COLUMN display_name TEXT");
+  }
+  if (!adminCols.some((c) => c.name === "created_at")) {
+    db.exec("ALTER TABLE admin ADD COLUMN created_at TEXT");
+  }
+  if (!adminCols.some((c) => c.name === "created_by")) {
+    db.exec("ALTER TABLE admin ADD COLUMN created_by INTEGER");
+  }
+
+  // Migration: add admin_id to credentials and card_keys
+  const credCols = db
+    .prepare("PRAGMA table_info(credentials)")
+    .all() as { name: string }[];
+  if (!credCols.some((c) => c.name === "admin_id")) {
+    db.exec("ALTER TABLE credentials ADD COLUMN admin_id INTEGER REFERENCES admin(id)");
+    // Backfill: assign all existing credentials to the first superadmin
+    const firstAdmin = db.prepare("SELECT id FROM admin ORDER BY id ASC LIMIT 1").get() as { id: number } | undefined;
+    if (firstAdmin) {
+      db.exec(`UPDATE credentials SET admin_id = ${firstAdmin.id} WHERE admin_id IS NULL`);
+    }
+  }
+
+  const cardCols = db
+    .prepare("PRAGMA table_info(card_keys)")
+    .all() as { name: string }[];
+  if (!cardCols.some((c) => c.name === "admin_id")) {
+    db.exec("ALTER TABLE card_keys ADD COLUMN admin_id INTEGER REFERENCES admin(id)");
+    // Backfill: assign all existing card_keys to the first superadmin
+    const firstAdmin = db.prepare("SELECT id FROM admin ORDER BY id ASC LIMIT 1").get() as { id: number } | undefined;
+    if (firstAdmin) {
+      db.exec(`UPDATE card_keys SET admin_id = ${firstAdmin.id} WHERE admin_id IS NULL`);
+    }
+  }
+
+  // Create index for admin_id lookups
+  db.exec("CREATE INDEX IF NOT EXISTS idx_cred_admin ON credentials(admin_id)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_card_admin ON card_keys(admin_id)");
 }

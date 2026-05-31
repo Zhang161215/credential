@@ -4,8 +4,9 @@ import { getDb } from "@/lib/db";
 import { generateCardKey } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
+  let admin;
   try {
-    await requireAdmin();
+    admin = await requireAdmin();
   } catch {
     return Response.json({ error: "未授权" }, { status: 401 });
   }
@@ -14,16 +15,25 @@ export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
   const pageSize = 20;
-  const status = url.searchParams.get("status") || ""; // "" | "used" | "unused"
+  const status = url.searchParams.get("status") || "";
   const offset = (page - 1) * pageSize;
 
-  let where = "";
+  const conditions: string[] = [];
   const params: (string | number)[] = [];
-  if (status === "used") {
-    where = "WHERE ck.is_used = 1";
-  } else if (status === "unused") {
-    where = "WHERE ck.is_used = 0";
+
+  // Admin data isolation
+  if (admin.role !== "superadmin") {
+    conditions.push("ck.admin_id = ?");
+    params.push(admin.id);
   }
+
+  if (status === "used") {
+    conditions.push("ck.is_used = 1");
+  } else if (status === "unused") {
+    conditions.push("ck.is_used = 0");
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const total = (
     db
@@ -53,8 +63,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let admin;
   try {
-    await requireAdmin();
+    admin = await requireAdmin();
   } catch {
     return Response.json({ error: "未授权" }, { status: 401 });
   }
@@ -77,7 +88,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "面值需在 1-1000000 之间" }, { status: 400 });
   }
 
-  const insert = db.prepare("INSERT INTO card_keys (key, value) VALUES (?, ?)");
+  const insert = db.prepare("INSERT INTO card_keys (key, value, admin_id) VALUES (?, ?, ?)");
   const checkKey = db.prepare("SELECT id FROM card_keys WHERE key = ?");
 
   const keys: string[] = [];
@@ -87,7 +98,7 @@ export async function POST(request: NextRequest) {
       do {
         key = generateCardKey();
       } while (checkKey.get(key));
-      insert.run(key, value);
+      insert.run(key, value, admin.id);
       keys.push(key);
     }
   });
