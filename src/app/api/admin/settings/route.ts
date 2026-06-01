@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
   );
 
-  const allowedKeys = ["announcement", "contact_info", "contact_icon", "account_price"];
+  const allowedKeys = ["announcement", "contact_info", "contact_icon", "account_price", "health_check_interval"];
   const transaction = db.transaction((entries: [string, string][]) => {
     for (const [k, v] of entries) {
       if (!allowedKeys.includes(k)) continue;
@@ -41,6 +41,11 @@ export async function POST(request: Request) {
       if (k === "account_price") {
         const n = parseInt(v);
         if (!n || n < 1) value = "100";
+        else value = String(n);
+      }
+      if (k === "health_check_interval") {
+        const n = parseInt(v);
+        if (!n || n < 0) value = "0";
         else value = String(n);
       }
       upsert.run(k, value);

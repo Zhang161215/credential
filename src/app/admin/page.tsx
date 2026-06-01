@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Loader2, FileText, KeyRound, CheckCircle2, Boxes, Users, Wallet, ShoppingCart, Coins,
+  HeartPulse, AlertTriangle, XCircle, HelpCircle,
 } from "lucide-react";
 
 interface Stats {
@@ -20,6 +21,12 @@ interface Stats {
   totalRecharged: number;
   totalRedeemed: number;
   totalBalance: number;
+  health: {
+    healthy: number;
+    unhealthy: number;
+    expired: number;
+    unknown: number;
+  };
 }
 
 const statConfig = [
@@ -83,6 +90,31 @@ export default function AdminDashboard() {
                 <p className={`text-2xl font-bold ${item.color}`}>
                   {stats[item.key]}
                 </p>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <h3 className="text-lg font-semibold">凭证健康状态</h3>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "健康", value: stats.health.healthy, icon: HeartPulse, color: "text-green-600" },
+          { label: "异常", value: stats.health.unhealthy, icon: AlertTriangle, color: "text-orange-600" },
+          { label: "过期", value: stats.health.expired, icon: XCircle, color: "text-red-600" },
+          { label: "未检测", value: stats.health.unknown, icon: HelpCircle, color: "text-gray-500" },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <Card key={item.label}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Icon className={`size-4 ${item.color}`} />
+                  {item.label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
               </CardContent>
             </Card>
           );

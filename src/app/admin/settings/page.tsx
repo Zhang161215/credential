@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Save, Megaphone, MessageCircle, Coins } from "lucide-react";
+import { Loader2, Save, Megaphone, MessageCircle, Coins, Activity } from "lucide-react";
 
 const ICON_OPTIONS = [
   { value: "qq", label: "QQ" },
@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [contactInfo, setContactInfo] = useState("");
   const [contactIcon, setContactIcon] = useState("qq");
   const [accountPrice, setAccountPrice] = useState("100");
+  const [healthCheckInterval, setHealthCheckInterval] = useState("30");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -40,6 +41,7 @@ export default function SettingsPage() {
           setContactInfo(data.contact_info || "");
           setContactIcon(data.contact_icon || "qq");
           setAccountPrice(data.account_price || "100");
+          setHealthCheckInterval(data.health_check_interval || "30");
         }
       })
       .finally(() => setLoading(false));
@@ -59,6 +61,7 @@ export default function SettingsPage() {
           contact_info: contactInfo,
           contact_icon: contactIcon,
           account_price: accountPrice,
+          health_check_interval: healthCheckInterval,
         }),
       });
 
@@ -109,6 +112,33 @@ export default function SettingsPage() {
                 onChange={(e) => setAccountPrice(e.target.value)}
                 className="w-40"
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="size-4" />
+              自动健康检测
+            </CardTitle>
+            <CardDescription>定时自动检测凭证健康状态，设为 0 则关闭自动检测</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="health-interval">检测间隔（分钟）</Label>
+              <Input
+                id="health-interval"
+                type="number"
+                min="0"
+                max="1440"
+                value={healthCheckInterval}
+                onChange={(e) => setHealthCheckInterval(e.target.value)}
+                className="w-40"
+              />
+              <p className="text-xs text-muted-foreground">
+                建议 30-60 分钟，设为 0 关闭自动检测。每次自动检测最多抽样 10 个凭证。
+              </p>
             </div>
           </CardContent>
         </Card>

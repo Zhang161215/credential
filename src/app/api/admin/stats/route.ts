@@ -81,6 +81,30 @@ export async function GET() {
     db.prepare("SELECT COALESCE(SUM(balance), 0) as v FROM users").get() as { v: number }
   ).v;
 
+  // Health summary for unredeemed credentials
+  const healthStats = db
+    .prepare(
+      `SELECT
+        COALESCE(h.status, 'unknown') as status,
+        COUNT(*) as count
+      FROM credentials c
+      LEFT JOIN (
+        SELECT credential_id, status,
+          ROW_NUMBER() OVER (PARTITION BY credential_id ORDER BY checked_at DESC) as rn
+        FROM credential_health
+      ) h ON h.credential_id = c.id AND h.rn = 1
+      WHERE c.is_redeemed = 0 ${isSuperadmin ? "" : "AND c.admin_id = ?"}
+      GROUP BY COALESCE(h.status, 'unknown')`
+    )
+    .all(...credParams) as { status: string; count: number }[];
+
+  const health = { healthy: 0, unhealthy: 0, expired: 0, unknown: 0 };
+  for (const row of healthStats) {
+    if (row.status in health) {
+      health[row.status as keyof typeof health] = row.count;
+    }
+  }
+
   return Response.json({
     totalCredentials,
     availableCredentials,
@@ -94,5 +118,6 @@ export async function GET() {
     totalRecharged,
     totalRedeemed,
     totalBalance,
+    health,
   });
 }

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { LayoutDashboard, FileText, KeyRound, Settings, LogOut, Users, History, Shield } from "lucide-react";
+import { LayoutDashboard, FileText, KeyRound, Settings, LogOut, Users, History, Shield, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const baseNavItems = [
@@ -14,6 +14,7 @@ const baseNavItems = [
   { href: "/admin/cards", label: "卡密管理", icon: KeyRound },
   { href: "/admin/records", label: "提取记录", icon: History },
   { href: "/admin/users", label: "用户管理", icon: Users },
+  { href: "/admin/health", label: "健康检查", icon: Activity },
   { href: "/admin/settings", label: "系统设置", icon: Settings },
 ];
 

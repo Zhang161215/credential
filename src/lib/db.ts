@@ -87,6 +87,7 @@ function initTables(db: Database.Database) {
     ["contact_info", ""],
     ["contact_icon", "qq"],
     ["account_price", "100"],
+    ["health_check_interval", "30"],
   ];
   const upsertSetting = db.prepare(
     "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)"
@@ -174,4 +175,21 @@ function initTables(db: Database.Database) {
   // Create index for admin_id lookups
   db.exec("CREATE INDEX IF NOT EXISTS idx_cred_admin ON credentials(admin_id)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_card_admin ON card_keys(admin_id)");
+
+  // Migration: credential_health table for health check feature
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS credential_health (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      credential_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'unknown',
+      five_hour_percent REAL,
+      weekly_percent REAL,
+      five_hour_reset_at TEXT,
+      weekly_reset_at TEXT,
+      error_message TEXT,
+      checked_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (credential_id) REFERENCES credentials(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_health_cred ON credential_health(credential_id, checked_at DESC);
+  `);
 }

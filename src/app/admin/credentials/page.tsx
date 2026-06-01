@@ -9,7 +9,7 @@ import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from "@/components/ui/table";
 import {
-  Loader2, Upload, CloudUpload, Trash2, ChevronLeft, ChevronRight,
+  Loader2, Upload, CloudUpload, Trash2, ChevronLeft, ChevronRight, HeartPulse,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/utils";
 
@@ -22,6 +22,21 @@ interface Credential {
   redeemed_by_username: string | null;
   created_at: string;
 }
+
+interface HealthResult {
+  credentialId: number;
+  status: "healthy" | "unhealthy" | "expired" | "unknown";
+  fiveHourPercent: number | null;
+  weeklyPercent: number | null;
+  errorMessage: string | null;
+}
+
+const STATUS_BADGE: Record<string, { label: string; className: string }> = {
+  healthy: { label: "健康", className: "bg-green-500/10 text-green-600 border-green-500/20" },
+  unhealthy: { label: "异常", className: "bg-orange-500/10 text-orange-600 border-orange-500/20" },
+  expired: { label: "过期", className: "bg-red-500/10 text-red-600 border-red-500/20" },
+  unknown: { label: "未知", className: "bg-gray-500/10 text-gray-500 border-gray-500/20" },
+};
 
 export default function CredentialsPage() {
   const [credentials, setCredentials] = useState<Credential[]>([]);
@@ -36,10 +51,19 @@ export default function CredentialsPage() {
   const [uploadMsg, setUploadMsg] = useState("");
   const [dragOver, setDragOver] = useState(false);
 
+  // Batch & check state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [batchChecking, setBatchChecking] = useState(false);
+  const [batchCheckProgress, setBatchCheckProgress] = useState("");
+  const [checkingId, setCheckingId] = useState<number | null>(null);
+  const [healthResults, setHealthResults] = useState<Record<number, HealthResult>>({});
+
   const router = useRouter();
 
   const fetchData = useCallback(() => {
     setLoading(true);
+    setSelectedIds(new Set());
     const params = new URLSearchParams({ page: page.toString() });
     if (status) params.set("status", status);
 
@@ -103,6 +127,76 @@ export default function CredentialsPage() {
     if (!confirm("确认删除此凭证？")) return;
     const res = await fetch(`/api/admin/credentials/${id}`, { method: "DELETE" });
     if (res.ok) fetchData();
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`确认删除选中的 ${selectedIds.size} 个凭证？`)) return;
+    setBatchDeleting(true);
+    try {
+      const res = await fetch("/api/admin/credentials/batch-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (res.ok) fetchData();
+    } catch {
+      // ignore
+    } finally {
+      setBatchDeleting(false);
+    }
+  };
+
+  const handleCheck = async (id: number) => {
+    setCheckingId(id);
+    try {
+      const res = await fetch(`/api/admin/credentials/${id}/check`, { method: "POST" });
+      if (res.ok) {
+        const result: HealthResult = await res.json();
+        setHealthResults((prev) => ({ ...prev, [id]: result }));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCheckingId(null);
+    }
+  };
+
+  const handleBatchCheck = async () => {
+    if (selectedIds.size === 0) return;
+    setBatchChecking(true);
+    const ids = Array.from(selectedIds);
+    for (let i = 0; i < ids.length; i++) {
+      setBatchCheckProgress(`${i + 1}/${ids.length}`);
+      try {
+        const res = await fetch(`/api/admin/credentials/${ids[i]}/check`, { method: "POST" });
+        if (res.ok) {
+          const result: HealthResult = await res.json();
+          setHealthResults((prev) => ({ ...prev, [ids[i]]: result }));
+        }
+      } catch {
+        // continue
+      }
+    }
+    setBatchChecking(false);
+    setBatchCheckProgress("");
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === credentials.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(credentials.map((c) => c.id)));
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -169,7 +263,29 @@ export default function CredentialsPage() {
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle>凭证列表 ({total})</CardTitle>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {selectedIds.size > 0 && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBatchCheck}
+                    disabled={batchChecking}
+                  >
+                    {batchChecking ? <Loader2 className="size-4 animate-spin" /> : <HeartPulse className="size-4" />}
+                    {batchChecking ? `检测中 ${batchCheckProgress}` : `批量检测 (${selectedIds.size})`}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleBatchDelete}
+                    disabled={batchDeleting}
+                  >
+                    {batchDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                    批量删除 ({selectedIds.size})
+                  </Button>
+                </>
+              )}
               {([
                 { key: "", label: "全部" },
                 { key: "available", label: "未兑换" },
@@ -198,41 +314,87 @@ export default function CredentialsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={credentials.length > 0 && selectedIds.size === credentials.length}
+                        onChange={toggleSelectAll}
+                        className="size-4 accent-neutral-900 cursor-pointer"
+                      />
+                    </TableHead>
                     <TableHead>ID</TableHead>
                     <TableHead>文件名</TableHead>
                     <TableHead>状态</TableHead>
+                    <TableHead>健康</TableHead>
                     <TableHead>兑换用户</TableHead>
                     <TableHead>兑换时间</TableHead>
                     <TableHead>操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {credentials.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell>{c.id}</TableCell>
-                      <TableCell className="font-mono text-xs">{c.filename}</TableCell>
-                      <TableCell>
-                        {c.is_redeemed ? (
-                          <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20">已兑换</Badge>
-                        ) : (
-                          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">待兑换</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs">{c.redeemed_by_username || "-"}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDateTime(c.redeemed_at)}
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="destructive" size="xs" onClick={() => handleDelete(c.id)}>
-                          <Trash2 className="size-3" />
-                          删除
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {credentials.map((c) => {
+                    const hr = healthResults[c.id];
+                    return (
+                      <TableRow key={c.id} className={selectedIds.has(c.id) ? "bg-muted/50" : ""}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(c.id)}
+                            onChange={() => toggleSelect(c.id)}
+                            className="size-4 accent-neutral-900 cursor-pointer"
+                          />
+                        </TableCell>
+                        <TableCell>{c.id}</TableCell>
+                        <TableCell className="font-mono text-xs max-w-40 truncate" title={c.filename}>{c.filename}</TableCell>
+                        <TableCell>
+                          {c.is_redeemed ? (
+                            <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20">已兑换</Badge>
+                          ) : (
+                            <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">待兑换</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {hr ? (
+                            <Badge className={STATUS_BADGE[hr.status]?.className}>
+                              {STATUS_BADGE[hr.status]?.label}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">{c.redeemed_by_username || "-"}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {formatDateTime(c.redeemed_at)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {!c.is_redeemed && (
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                onClick={() => handleCheck(c.id)}
+                                disabled={checkingId === c.id}
+                              >
+                                {checkingId === c.id ? (
+                                  <Loader2 className="size-3 animate-spin" />
+                                ) : (
+                                  <HeartPulse className="size-3" />
+                                )}
+                                检测
+                              </Button>
+                            )}
+                            <Button variant="destructive" size="xs" onClick={() => handleDelete(c.id)}>
+                              <Trash2 className="size-3" />
+                              删除
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                   {credentials.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                         暂无数据
                       </TableCell>
                     </TableRow>

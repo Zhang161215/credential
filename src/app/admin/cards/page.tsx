@@ -11,7 +11,7 @@ import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from "@/components/ui/table";
 import {
-  Loader2, Copy, Check, Download, Trash2, ChevronLeft, ChevronRight, KeyRound,
+  Loader2, Copy, Check, Download, Trash2, ChevronLeft, ChevronRight, KeyRound, CheckCircle2, XCircle,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/utils";
 
@@ -107,6 +107,23 @@ export default function CardsPage() {
     if (!confirm("确认删除此卡密？")) return;
     const res = await fetch(`/api/admin/cards/${id}`, { method: "DELETE" });
     if (res.ok) fetchData();
+  };
+
+  const handleToggleStatus = async (is_used: boolean) => {
+    if (selectedIds.size === 0) return;
+    const label = is_used ? "已使用" : "未使用";
+    if (!confirm(`确认将选中的 ${selectedIds.size} 个卡密标记为${label}？`)) return;
+    const ids = Array.from(selectedIds);
+    await Promise.all(
+      ids.map((id) =>
+        fetch(`/api/admin/cards/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_used }),
+        })
+      )
+    );
+    fetchData();
   };
 
   const handleBatchDelete = async () => {
@@ -244,15 +261,33 @@ export default function CardsPage() {
             <CardTitle>卡密列表 ({total})</CardTitle>
             <div className="flex gap-2 items-center">
               {selectedIds.size > 0 && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleBatchDelete}
-                  disabled={batchDeleting}
-                >
-                  {batchDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-                  批量删除 ({selectedIds.size})
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleToggleStatus(true)}
+                  >
+                    <CheckCircle2 className="size-4" />
+                    标记已用 ({selectedIds.size})
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleToggleStatus(false)}
+                  >
+                    <XCircle className="size-4" />
+                    标记未用 ({selectedIds.size})
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleBatchDelete}
+                    disabled={batchDeleting}
+                  >
+                    {batchDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                    批量删除 ({selectedIds.size})
+                  </Button>
+                </>
               )}
               {([
                 { key: "", label: "全部" },
